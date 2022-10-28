@@ -1,6 +1,8 @@
 # Predicting how long employees would stay with the company
 ## Project for Introduction to Statistical Learning and Data Mining
 
+[SFSU image](https://github.com/PyiThan/employee_Data_Analysis_in_R/blob/main/images/sfsu.jpeg)
+
 ## [Link to see my Kaggle Notebook](https://www.kaggle.com/code/pyithan/predicting-how-long-employees-would-stay)
 
 ## [Link to Data](https://www.kaggle.com/datasets/jacksonchou/hr-data-for-analytics)
