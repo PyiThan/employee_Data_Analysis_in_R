@@ -1,5 +1,8 @@
 # Predicting how long employees would stay with the company
-## Project for Introduction to Statistical Learning and Data Mining
+## Project for Introduction to Statistical Learning and Data Mining class at San Francisco State University
+
+Cick the above pdf to see the project. The name of the pdf file is "Predicting Employee Retention using HR Data Set using the Non parametric and parametric method"
+
 
 ## Project Overview
 
