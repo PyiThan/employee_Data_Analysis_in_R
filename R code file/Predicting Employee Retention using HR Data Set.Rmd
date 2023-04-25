@@ -1,0 +1,273 @@
+---
+title: "Predicting Employee Retention using HR Data Set using the Non parametric and parametric method"
+output: html_document
+date: "2023-04-21"
+---
+* The goal of this project is to predict employee retention. The data set using is HR Data for Analytics. It can be found in Kaggle.com. 
+
+* In order to achieve this objective, first we need to explore and compare which model gives the accurate and better results.
+
+* We will be examining parametric method such as linear regression, as well as non parametric method such as KNN, to determine the most effective approach.
+
+## load the required library
+
+```{r,echo=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(glmnet)
+library(pls)
+library (e1071)
+library(corrplot)
+library(tree)
+library(ipred)
+library(rpart)
+library(gam)
+library(randomForest)
+library(gbm)
+library(caret)
+library(class)
+library(FNN)
+library(MASS)
+```
+# load the dataset
+
+```{r}
+HREmployee=read.csv("~/Desktop/SFSU/personalMachineLearningProject/HR_comma_sep.csv",header=TRUE)
+```
+
+# quick look at the dataset
+
+```{r}
+str(HREmployee)
+```
+# Convert the numeric binary variable into factor variable. (This will make the variable easier to understand and interpret)
+
+```{r}
+HREmployee$Work_accident=factor(HREmployee$Work_accident,levels=c(0,1),labels=c("no work accident","work accident"))
+HREmployee$left=factor(HREmployee$left,levels=c(0,1),labels=c("stay with the company","left the company"))
+HREmployee$promotion_last_5years=factor(HREmployee$promotion_last_5years,levels=c(0,1),labels=c("no promotion","promotion"))
+```
+# Change the column name sales into department in R. (This will make the variable easier to understand and interpret)
+
+```{r}
+names(HREmployee)[names(HREmployee)=="sales"]="department"
+```
+# Perform feature selection using randomForest 
+
+To identify the most important predictors that contribute to a given outcome variable).
+
+By selecting only the most relevant predictors, you can improve the accuracy and interpretability of predictive models.
+
+```{r}
+set.seed(456)
+rf <- randomForest(time_spend_company~ ., data = HREmployee,ntree=500, importance = TRUE)
+importance <- varImp(rf)
+selected_features_rf = rownames(importance)[importance$Overall > mean(importance$Overall)]
+selected_features <- c(selected_features_rf, "time_spend_company")
+print(selected_features_rf)
+HREmployee <- HREmployee%>%
+  dplyr::select(one_of(selected_features))
+```
+From the features selection using random Forest, I found out that variables "satisfaction_level","last_evaluation","number_project","average_montly_hours","left" are selected features.
+
+# Check missing values
+
+```{r}
+sapply(HREmployee,function(x) sum(is.na(x)))
+```
+No missing values detect from the data
+
+# Check null values
+
+```{r}
+sum(sapply(HREmployee,is.null))
+```
+no null values detect from the data
+
+# Check outlers of selected features using boxplot
+
+#### boxplot of satisfaction level
+```{r}
+boxplot(HREmployee$satisfaction_level,main="Box plot of satisfaction level")
+```
+
+From the above graph, no outliers detect form the satisfaction level variables.
+
+#### boxplot of last evaluation
+```{r}
+boxplot(HREmployee$last_evaluation,main="Box plot of last evaluation score")
+```
+
+From the above graph, no outliers detect form the last evaluation variables.
+
+#### boxplot of number Of Project the employee works
+```{r}
+boxplot(HREmployee$number_project,main="Box plot of number Of Project the employee works")
+```
+
+From the above graph, no outliers detect form the number Of Project the employee works variables.
+
+#### boxplot of average monthly hours employee works
+```{r}
+boxplot(HREmployee$average_montly_hours,main="Box plot of average monthly hours employee works")
+```
+
+From the above graph, no outliers detect form the average monthly hours employee works variables.
+
+#### cannot use boxplot to check the "left" column since it is a non-numeric column. Need to use a barplot to visualize the frequncy of the variable
+
+```{r}
+barplot(table(HREmployee$left),main="Histogram of whether or not employee left the company",xlab="left(1=left,2=stayed)")
+```
+
+From the above graph, we detect the imbalanced data set. It can cause problems when we tried to use "left" as our response variable. 
+
+# Creating training and testing data
+
+```{r}
+train = sample(dim(HREmployee)[1], dim(HREmployee)[1]*0.8)
+test=-train
+HREmployee.test=HREmployee[test,]
+HREmployee.train=HREmployee[train,]
+```
+# Check correlation between selected features() since multicollinearity can make the problem difficult to see the true relationship between the predictor and response variables. 
+
+```{r}
+numericVariable=sapply(HREmployee,is.numeric)
+numericData=HREmployee[,numericVariable]
+predictorsNumericData=dplyr::select(numericData,-time_spend_company)
+corMatrix=cor(predictorsNumericData)
+corMatrix
+corrplot(corMatrix,type="upper",method="color",tl.col="black",t1.srt=45)
+```
+
+The correlation coefficients between all pairs of predictor variables in the model are less than 0.5. Thus, we don't need to worry about multicollinearity in this problem. 
+
+# Fit the linear regression model with selected features using cross-validation. 
+
+Since this is a linear regression model, we will use MSE and RMSE. It will give an idea of how well the fitted model is predicting the response variable
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10)
+lm.fit <- train(time_spend_company ~ ., data = HREmployee.train , method = "glm", trControl = fitControl,metric="RMSE")
+lm.pred=predict(lm.fit,HREmployee.test)
+mse=mean((lm.pred-HREmployee.test$time_spend_company)^2) #test MSE
+linearRegRMSE=sqrt(mean((lm.pred-HREmployee.test$time_spend_company)^2))
+linearRegRMSE
+ggplot(data=data.frame(actual=HREmployee.test$time_spend_company,predicted=lm.pred))+
+  geom_point(aes(x=actual,y=predicted))+
+  geom_abline(slope=1,intercept=0,color="red")+
+  labs(x="Actual Value",y="Predicted Value",title="Linear Regression: Actual Vs. predicted values")
+```
+
+* MSE and RMSE tell us that the model is making accurate predictions. However, the scatter plot of predicted values vs. actual values shows that the points are far from diagonal line.
+
+* This suggests that the linear regression model is not good for making predictions. The linear regression model is not capturing all the important patterns in the data.
+
+* Therefore, I will use a different machine learning model to see which model will make accurate predictions.
+
+* We will fit the model using K-Nearest neighbor. It can handle non linear relationships between predictor and response variables.
+
+* However, in KNN model, the predictor variable,x, must be numeric. 
+
+# converting non numeric predictors to numeric value since KNN requires to calculate the distance between test data(aka.real data) and all training points.
+
+```{r}
+#first we need to convert non numeric predictors varabile into numeric variable by replacing the factor levels with integers
+#this is for training data
+HREmployee.train$left=as.numeric(HREmployee.train$left)
+#this is for testing data
+HREmployee.test$left=as.numeric(HREmployee.test$left)
+```
+# Chose the best Kvalue using the cross validation
+```{r}
+kRange=seq(1,20,by=1)
+fitControl2 <- trainControl(method = "cv", number = 10)
+knnGrid=expand.grid(k=kRange)
+knnFit=train(time_spend_company ~ ., data=HREmployee.train,method="knn",trControl=fitControl2,tuneGrid=knnGrid,preProcess = c("center", "scale"), metric = "RMSE")
+knnOptimal=knnFit$bestTune$k
+print(paste("K value",knnOptimal,"will give the best balance between bias and variance of the model to make predictions on a new data point. "))
+```
+# Use a graph to select the optimal value of k in KNN.
+
+```{r}
+kValue=seq(1,22,by=2)
+knnFit2=train(time_spend_company ~ ., data=HREmployee.train,method="knn",trControl=fitControl2,tuneGrid=data.frame(k=kValue),preProcess = c("center", "scale"), metric = "RMSE")
+plot(knnFit2)
+```
+From the above graph, k=20 nearest neighbors is also good for predicting the new data point. It will give the best balance between bias and variance of the model.
+
+# fit the KNN model using the K value from cross validation
+
+```{r}
+library(FNN)
+library(MASS)
+library(class)
+
+knnRegressionFit=knn.reg(train=HREmployee.train[,-6],test=HREmployee.test[,-6],y=HREmployee.train[,6],k=knnOptimal)
+
+HREmployee_knn_rmse <- sqrt(mean((HREmployee.test$time_spend_company - knnRegressionFit$pred)^2))
+print(paste0("RMSE: ", round(HREmployee_knn_rmse, 2)))
+
+
+```
+Let's continue examining using the different model. This time we will be using decision trees machine learning model to see whether or not this model is the best fit for this model.
+
+# Decision trees. 
+
+unlike linear regression, decision trees machine learning model doesn't assume that there is a underlying distribution of the data. However, it has some disadvantages. For example, it can cause ovefitting if we don't handle careful.
+
+# fit the decision trees model on training data
+```{r}
+set.seed(1)
+tree.HR=tree(time_spend_company~satisfaction_level+last_evaluation+number_project+average_montly_hours+left,data=HREmployee.train)
+```
+# plots the decision tree model and #add text labels to the decision tree plot
+
+```{r}
+plot(tree.HR)
+text(tree.HR, pretty=0)
+summary(tree.HR) #displays a summary of the decision tree model, including the number of terminal nodes and overall error rate.
+```
+
+# performs cross validation on the decision tree model. This function generates a sequence of the models with different numbers of terminal nodes, and computes the cross validation error rate for each model.
+
+```{r}
+cv.HR=cv.tree(tree.HR) 
+plot(cv.HR$size,cv.HR$dev,type='b') #plot the cross validation error rate against the number of terminal nodes
+#choose terminal nodes 4 because it gives the lowest cross validation error rate in graph
+```
+
+# prunes the decision tree model to the optimal number of terminal nodes.
+
+```{r}
+prune.HR=prune.tree(tree.HR,best=4) #prunes the decision tree model to the optimal number of terminal nodes. The best parameter is set to 4 to select the model with the lowest cross validation error rate.
+plot(prune.HR) #plots the pruned decision tree model 
+text(prune.HR,pretty=0) #adds text labels to the pruned decision tree plot
+
+```
+# test to see the performance of the model on the testing data or new data
+
+```{r}
+yhat=predict(tree.HR,newdata=HREmployee.test) #predict
+plot(yhat,HREmployee.test$time_spend_company,xlab="Predict Value",ylab="Test data(real data)")
+points(yhat,col="blue")
+points(HREmployee.test$time_spend_company,col="red")
+legend("topleft", legend=c("Predicted", "Actual"), col=c("blue", "red"), pch=1)
+abline(0,1)
+decisionTreesMSe=mean((yhat-HREmployee.test$time_spend_company)^2) #MSE
+decisionTreesRMSE=sqrt(mean((yhat-HREmployee.test$time_spend_company)^2)) #RMSE
+print(paste("RMSE value using decision trees method is",round(decisionTreesRMSE,2)))
+```
+# Graph to show RMSE values for linear regression, KNN, and decision trees.
+
+```{r}
+RMSE=c(linearRegRMSE,HREmployee_knn_rmse,decisionTreesRMSE)
+barplot(RMSE,names.arg = c("Linear Regression", "KNN", "Decision Trees"), xlab = "Model", ylab = "RMSE", main = "Comparison of Model RMSEs")
+```
+
+Based on the above graph, RMSE value from linear regression, KNN, and Decision trees are close to each other. It is hard to say which model is the best fit without farther examine using the different machine learning model.
+
+In the future, I need to use different metrics to evaluate the performance of these three models. For example, we could use adjusted R-squared or AIC or BIC. In practice, many Data Scientist use multiple metrics to evaluate the performance of the mode.
+
